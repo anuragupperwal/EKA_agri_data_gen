@@ -1,9 +1,6 @@
 
 # Agricultural Synthetic Reasoning Data Generation System
 
-This repository contains a **production-grade Python framework** for generating large-scale, high-quality **synthetic agronomic reasoning data** for training and evaluating Large Language Models (LLMs).
-
-The system is designed to be **modular, dataset-grounded, taxonomy-driven, resumable, and scalable**, enabling systematic generation of **both valid and invalid (negative) agricultural scenarios** with **explicit reasoning traces in Hindi**.
 
 ---
 
