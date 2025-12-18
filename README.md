@@ -300,23 +300,3 @@ Outputs contain:
 │       └── cli/
 │           └── main.py
 ```
-
----
-
-## Final Notes
-
-This system is **not a prompt generator**.
-It is a **controlled synthetic reasoning engine** designed for:
-
-* fine-tuning LLMs
-* benchmarking agronomic reasoning
-* studying failure modes
-* generating negative knowledge explicitly
-
-The design scales cleanly to:
-
-* soil
-* pests
-* fertilizer
-* irrigation
-* farmer query modeling
