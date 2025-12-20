@@ -51,73 +51,33 @@ The goal of this project is to build a **reliable synthetic data factory for agr
 
 ## System Architecture
 
-The system is divided into clearly separated layers:
+The system is designed as a modular pipeline with three distinct layers:
 
 ### 1. Data Access Layer
+* **`taxonomy_manager.py`**: Manages the schemas (Crops, Weather, Soil).
+* **`adapters/`**: specialized readers that pull real numbers from `Crop_recommendation.csv` and `weather.csv` to "hydrate" abstract scenarios.
 
-Responsible for structured access to taxonomies and datasets.
 
-* `taxonomy_manager.py`
-  Loads YAML taxonomies into MongoDB and exposes active groups and entries.
+### 2. Knowledge Layer (The "Bundle Builder")
+* **`bundle_builder.py`**: 
+    * Generates the **Cartesian Product** of all active taxonomies (Crop × Weather × Soil).
+    * Instead of creating thousands of small files, it streams these scenarios into a single, memory-efficient **JSONL file** (`bundles.jsonl`).
+    * Each line is a self-contained "Ground Truth" bundle.
 
-* `adapters/`
-  Dataset-specific adapters (crop, weather, soil) that normalize raw CSV data into canonical schema.
 
----
+### 3. Generation Layer (The "Engine")
+* **`prompt_builder.py`**: Wraps the bundle in a strict system prompt that enforces Hindi output and feasibility checking.
+* **`generator.py` (Local Engine)**:
+    * Runs generation locally using multi-threading (`ThreadPoolExecutor`).
+    * Features **Smart Rate Limiting** (prevents 429 errors) and **Crash Recovery** (resumes from last saved line).
+* **`create_job.py` (Batch Engine)**:
+    * Offloads processing to **Google Gemini Batch API**.
+    * 50% cheaper and higher limits than standard API.
+    * Handles asynchronous submission, polling, and result parsing.
 
-### 2. Knowledge & Scenario Layer
-
-* `bundle_builder.py`
-  Creates **scenario bundles** by combining:
-
-  * crop taxonomy entry
-  * weather taxonomy entry
-  * dataset-grounded numeric attributes
-
-Each bundle is deterministic and uniquely identified, e.g.:
-
-```
-crop_maize__weather_hot_dry.json
-```
-
-These bundles are the **only inputs** passed to the LLM.
 
 ---
 
-### 3. Generation Layer
-
-* `prompt_builder.py`
-  Converts structured bundle JSON into a controlled English prompt instructing:
-
-  * Hindi output
-  * explicit reasoning
-  * feasibility analysis
-
-* `generator.py` (GenerationEngine)
-  Orchestrates:
-
-  * batching of bundles
-  * LLM calls
-  * JSON sanitization
-  * output persistence
-  * checkpointing
-
----
-
-### 4. Model Provider Layer
-
-Thin wrappers over LLM APIs:
-
-* `gemini_provider.py`
-* `perplexity_sonar_provider.py`
-
-Each provider:
-
-* handles authentication
-* abstracts request format
-* allows provider swapping without pipeline changes
-
----
 
 ## Installation & Setup
 
@@ -165,16 +125,18 @@ DATA_DIR="data"
 ## Command-Line Interface (CLI)
 
 ### Run entire pipeline (create batch and generation (non-batch))
+
 ```bash
 python -m agri_data_gen.cli.main pipeline-run
 ```
 
 ### Batch API processing
+This submits your bundles to Google's background servers. It is the fastest and most robust method for large datasets (>1,000 records).
 ```bash
 python -m agri_data_gen.cli.main batch-run
 ```
 
-### Load Taxonomies to MongoDB
+### Load YAML Taxonomies to MongoDB
 
 ```bash
 python -m agri_data_gen.cli.main load-taxonomies
@@ -188,72 +150,24 @@ python -m agri_data_gen.cli.main reset-taxonomies
 
 
 ---
+## Core Workflow
 
-## Core Workflow & Key Components
+### Phase 1: Bundle Construction
+The system iterates through every defined crop and weather condition to create grounded scenarios.
+* **Input:** Taxonomy Definitions (e.g., "Rice", "High Temp").
+* **Process:** Hydrates abstract definitions with real values from CSV datasets (e.g., "Rice" + "35°C", "90% Humidity").
+* **Output:** `data/bundles/bundles.jsonl`
 
-### Phase 1: Taxonomy Definition & Seeding
+### Phase 2: Generation
+The engine reads the JSONL file line-by-line to process requests.
+* **Input:** A single bundle line (one specific scenario).
+* **Prompting:** Instructs the model to act as an advisor, specifically asking: *"Can 'Rice' grow in '35°C'? Explain why."*
+* **Model:** `gemini-2.0-flash-thinking-exp` (specifically selected to capture internal Chain-of-Thought).
 
-Taxonomies define **what dimensions to vary**, not data values.
-
-Examples:
-
-* crop
-* weather
-* soil (future)
-* pests (future)
-
-Each taxonomy:
-
-* has a group name
-* defines attributes
-* lists valid scenario IDs
-
-
----
-
-### Phase 2: Dataset-Grounded Scenario Bundling
-
-Adapters read raw datasets:
-
-* `Crop_recommendation.csv`
-* `weather.csv`
-
-Adapters compute numeric ranges:
-
-* rainfall tolerance
-* temperature tolerance
-* pH range
-
-Bundles are created as **pure structured JSON**:
-
-```json
-{
-  "bundle_id": "crop_maize__weather_cool_dry",
-  "crop": {...},
-  "weather": {...}
-}
-```
-
----
-
-### Phase 3: Reasoning & Advisory Generation
-
-Each batch of bundles is passed to the LLM with instructions to:
-
-* analyze feasibility
-* explain reasoning step-by-step
-* generate Hindi farmer advisory
-
-Outputs contain:
-
-* full input context
-* detailed reasoning
-* final advisory
-* category (in Hindi)
-
----
-
-### Phase 4: Validation, Resume & Scaling
+### Phase 3: Result Parsing
+The raw API response is parsed to separate the structured output:
+* **Thinking Tokens:** The model's hidden internal reasoning and feasibility checks.
+* **Advisory:** The final, actionable Hindi output for the farmer.
 
 ---
 
@@ -262,12 +176,13 @@ Outputs contain:
 ```
 .
 ├── data/
-│   ├── raw/
+│   ├── raw/                    # Source CSVs
 │   │   ├── Crop_recommendation.csv
 │   │   └── weather.csv
 │   ├── bundles/
+│   │   └── bundles.jsonl
 │   └── generated/
-│       └── data.jsonl
+│       └── data.jsonl          <-- LLM Outputs (Input + Thought + Answer)
 ├── sample_data/
 │   └── taxonomies/
 ├── src/
@@ -285,6 +200,8 @@ Outputs contain:
 │       │   └── providers/
 │       │       ├── gemini_provider.py
 │       │       └── perplexity_sonar_provider.py
-│       └── cli/
-│           └── main.py
+│       ├── cli/
+│       |   └── main.py                 # Entry Point
+│       └── gemini_batch_processing/
+│           └── create_job.py           # Batch API Handler
 ```
