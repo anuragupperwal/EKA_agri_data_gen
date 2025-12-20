@@ -162,7 +162,7 @@ The system iterates through every defined crop and weather condition to create g
 The engine reads the JSONL file line-by-line to process requests.
 * **Input:** A single bundle line (one specific scenario).
 * **Prompting:** Instructs the model to act as an advisor, specifically asking: *"Can 'Rice' grow in '35°C'? Explain why."*
-* **Model:** `gemini-2.0-flash-thinking-exp` (specifically selected to capture internal Chain-of-Thought).
+* **Model:** `gemini-2.5-pro` (specifically selected to capture internal Chain-of-Thought).
 
 ### Phase 3: Result Parsing
 The raw API response is parsed to separate the structured output:
