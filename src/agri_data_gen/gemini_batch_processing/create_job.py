@@ -19,34 +19,34 @@ class TextBatchJob:
         os.makedirs(self.output_dir, exist_ok=True)
         self.jsonl_path = f"{self.output_dir}/batch_requests.jsonl"
 
-    def prepare_prompt(self, data_bundle):
-        """
-        Takes the entire dictionary, converts it to a formatted JSON string,
-        and wraps it in a strict instruction block.
-        """
-        # Convert the dictionary to a pretty-printed JSON string
-        data_json = json.dumps(data_bundle, indent=2, ensure_ascii=False)
+    # def prepare_prompt(self, data_bundle):
+    #     """
+    #     Takes the entire dictionary, converts it to a formatted JSON string,
+    #     and wraps it in a strict instruction block.
+    #     """
+    #     # Convert the dictionary to a pretty-printed JSON string
+    #     data_json = json.dumps(data_bundle, indent=2, ensure_ascii=False)
         
-        prompt = f"""
-        Role: Expert Agricultural Advisor for Indian farmers.
-        Language: Hindi (Strictly).
+    #     prompt = f"""
+    #     Role: Expert Agricultural Advisor for Indian farmers.
+    #     Language: Hindi (Strictly).
         
-        Input Data (JSON):
-        ```json
-        {data_json}
-        ```
+    #     Input Data (JSON):
+    #     ```json
+    #     {data_json}
+    #     ```
         
-        Task:
-        You are provided with a data bundle containing details about a specific crop scenario (Crop, Weather, Soil, Pest, Disease, Stage, etc.). 
-        1. Analyze all the provided parameters in the JSON "Input Data" and fill if missing or "None". 
-        2. Generate a practical, actionable advisory for the farmer based *only* on these specific conditions.
-        3. If specific values (like temperature or rainfall) are provided, reference them in your reasoning.
+    #     Task:
+    #     You are provided with a data bundle containing details about a specific crop scenario (Crop, Weather, Soil, Pest, Disease, Stage, etc.). 
+    #     1. Analyze all the provided parameters in the JSON "Input Data" and fill if missing or "None". 
+    #     2. Generate a practical, actionable advisory for the farmer based *only* on these specific conditions.
+    #     3. If specific values (like temperature or rainfall) are provided, reference them in your reasoning.
         
-        Constraints:
-        - The output must be purely the advisory text in Hindi.
-        - Tone: Respectful, clear, and authoritative (kisan mitra).
-        """
-        return prompt
+    #     Constraints:
+    #     - The output must be purely the advisory text in Hindi.
+    #     - Tone: Respectful, clear, and authoritative (kisan mitra).
+    #     """
+    #     return prompt
 
 
     def prepare_prompt(self, data_bundle):
@@ -111,15 +111,13 @@ class TextBatchJob:
                     bundle = json.loads(line.strip())
                     # Create Custom ID
                     custom_id = bundle.get('bundle_id', f"req_{index}")
-                    
                     # Generate Prompt
                     prompt_text = self.prepare_prompt(bundle)
-                    
                     # Construct Request Object
                     request_entry = {
                         "custom_id": custom_id,
                         "method": "POST",
-                        "url": "/v1beta/models/gemini-2.0-flash-thinking-exp:generateContent", 
+                        "url": "/v1beta/models/gemini-2.5-flash:generateContent", 
                         "body": {
                             "contents": [{"parts": [{"text": prompt_text}]}],
                             "generationConfig": {
@@ -154,7 +152,7 @@ class TextBatchJob:
         logger.info(f"File uploaded: {batch_input_file.name}. Starting Batch Job...")
         
         self.batch_job = self.client.batches.create( 
-            model="models/gemini-2.0-flash-thinking-exp",
+            model="models/gemini-2.5-flash",
             src=batch_input_file.name,
             config=types.BatchJobConfig(display_name=self.job_id)
         )
