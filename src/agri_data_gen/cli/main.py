@@ -42,7 +42,7 @@ def reset_taxonomies():
 @app.command()
 def batch_run(bundle_file: str = "data/bundles/bundles.jsonl"):
     """
-    Submits the generated bundles to Google Batch API (Cheaper/Faster).
+    Submits the generated bundles to Google Batch API.
     """
     # safety check
     if not Path(bundle_file).exists():

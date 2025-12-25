@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 
 class TextBatchJob:
     def __init__(self, job_name="agri-advisory-job"):
-        self.api_key = os.getenv('GOOGLE_API_KEY_2')
+        self.api_key = os.getenv('GOOGLE_API_KEY_SOKET')
+        self.model_name = "models/gemini-2.5-flash"
         self.client = genai.Client(api_key=self.api_key)  
         self.job_name = job_name
         self.job_id = f"{job_name}_{int(time.time())}"
@@ -99,10 +100,8 @@ class TextBatchJob:
                     prompt_text = self.prepare_prompt(bundle)
                     # Construct Request Object 
                     request_entry = {
-                        "icustom_idd": custom_id, # Batch API response file lines map back to input via custom_id
-                        "method": "POST", 
-                        "url": "/v1beta/models/gemini-2.5-flash:generateContent",
-                        "body": { 
+                        "custom_id": custom_id, 
+                        "request": { 
                             "contents": [{"parts": [{"text": prompt_text}]}],
                             "generationConfig": {
                                 "responseMimeType": "application/json", 
@@ -137,7 +136,7 @@ class TextBatchJob:
         logger.info(f"File uploaded: {batch_input_file.name}. Starting Batch Job...")
         
         self.batch_job = self.client.batches.create( 
-            model="models/gemini-2.5-flash",
+            model=self.model_name,
             src=batch_input_file.name,
             config={
                 'display_name': self.job_id,
@@ -158,7 +157,7 @@ class TextBatchJob:
             if state in ["JOB_STATE_SUCCEEDED", "JOB_STATE_FAILED", "JOB_STATE_CANCELLED"]:
                 return job_status
             
-            time.sleep(30) 
+            time.sleep(60) 
 
 
     def download_and_parse_results(self):
@@ -169,12 +168,15 @@ class TextBatchJob:
             logger.error("Job failed or incomplete.") 
             return 
 
-        output_file_name = job.output_file.name
+        # Check both locations just to be safe across SDK versions
+
+        output_file_name = job.dest.file_name
+        
         logger.info(f"Downloading results from {output_file_name}...")
         
         # Download raw content
-        content = self.client.files.content(file=output_file_name)
-        
+        content = self.client.files.download(file=output_file_name)
+
         # Save Raw Output
         raw_path = f"{self.output_dir}/raw_results.jsonl"
         with open(raw_path, 'wb') as f:
@@ -241,5 +243,8 @@ if __name__ == "__main__":
     
     raw_path = processor.download_and_parse_results()
     print("Saved raw result at: ", raw_path)
+
+
+
 
 
